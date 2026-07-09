@@ -90,18 +90,18 @@
     border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:middle}
   .beat{font-size:12px;color:var(--ghost);margin-bottom:8px;font-variant-numeric:tabular-nums}
   .beat b{color:var(--muted)}
-  .setline{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:8px;align-items:center;margin-bottom:8px}
+  .setline{display:grid;grid-template-columns:24px 1fr 1fr 44px;gap:6px;align-items:center;margin-bottom:8px}
   .setline .n{color:var(--muted);font-weight:700;text-align:center;font-size:14px}
   .setline .done{color:var(--accent)}
   .stepwrap{display:flex;align-items:stretch;gap:0;background:var(--surface2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .stepwrap input{border:none;border-radius:0;background:transparent;padding:10px 2px;min-width:0}
-  .stepwrap button{width:38px;font-size:18px;font-weight:800;color:var(--muted);flex:none}
+  .stepwrap input{border:none;border-radius:0;background:transparent;padding:10px 0;min-width:0;flex:1}
+  .stepwrap button{width:30px;font-size:17px;font-weight:800;color:var(--muted);flex:none}
   .stepwrap button:active{color:var(--accent)}
   .chk{width:44px;height:44px;border:1px solid var(--line);border-radius:10px;
     display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--ghost)}
   .chk.on{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-  .collabel{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:8px;
+  .collabel{display:grid;grid-template-columns:24px 1fr 1fr 44px;gap:6px;
     font-size:11px;color:var(--ghost);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
   .collabel span:nth-child(2),.collabel span:nth-child(3){text-align:center}
   .addset{color:var(--accent);font-weight:700;font-size:14px;padding:6px 0}
@@ -899,7 +899,7 @@ const History={
       const ex=exById(en.exId);
       let rows="";
       en.sets.forEach((st,si)=>{
-        rows+=`<div class="setline" style="grid-template-columns:34px 1fr 1fr 44px">
+        rows+=`<div class="setline">
           <div class="n">${si+1}</div>
           <input type="number" inputmode="decimal" value="${st.w}"
             onchange="History.eSet(${ei},${si},'w',this.value)">
