@@ -30,7 +30,7 @@
     background:var(--bg);color:var(--text);
     font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     font-size:16px;line-height:1.4;
-    padding-bottom:76px;
+    padding-bottom:calc(84px + env(safe-area-inset-bottom));
     overscroll-behavior-y:contain;
   }
   h1,h2,h3{font-weight:800;letter-spacing:.01em}
@@ -108,7 +108,7 @@
   .rmset{color:var(--ghost);font-weight:700;font-size:14px;padding:6px 0 6px 14px}
 
   /* rest timer */
-  .timerbar{position:fixed;bottom:64px;left:12px;right:12px;z-index:9;
+  .timerbar{position:fixed;bottom:calc(64px + env(safe-area-inset-bottom));left:12px;right:12px;z-index:9;
     background:var(--surface2);border:1px solid var(--accent);border-radius:12px;
     display:flex;align-items:center;gap:12px;padding:10px 14px;
     box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -156,6 +156,8 @@
   .sess .ln{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
 
   /* weight tab */
+  .wt-stats{display:flex;gap:14px;flex-wrap:wrap}
+  .wt-stat{flex:1 1 130px;min-width:0}
   .wt-big{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
   .wt-delta{font-size:14px;font-weight:700}
   .wt-delta.up{color:var(--danger)}
@@ -308,7 +310,6 @@ const fmtDate=iso=>{const[y,m,d]=iso.split("-");return new Date(y,m-1,d).toLocal
 const exById=id=>S.exercises.find(e=>e.id===id);
 const progById=id=>S.programs.find(p=>p.id===id);
 const activeProg=()=>S.activeProgram?progById(S.activeProgram):null;
-const e1rm=(w,r)=>r>0?w*(1+r/30):0;
 
 function lastEntryFor(exId){
   for(let i=S.sessions.length-1;i>=0;i--){
@@ -316,15 +317,6 @@ function lastEntryFor(exId){
     if(en)return {date:S.sessions[i].date,sets:en.sets.filter(s=>s.done&&s.r>0)};
   }
   return null;
-}
-function bestE1rmFor(exId){
-  let best=0;
-  for(const sess of S.sessions){
-    const en=sess.entries.find(e=>e.exId===exId);
-    if(!en)continue;
-    for(const s of en.sets)if(s.done)best=Math.max(best,e1rm(s.w,s.r));
-  }
-  return best;
 }
 function sessionCountFor(exId){
   return S.sessions.filter(s=>s.entries.some(e=>e.exId===exId)).length;
@@ -573,12 +565,6 @@ const Workout={
         }
       }
     }
-    // PR detection against all prior history (before this save)
-    let prs=[];
-    for(const en of kept){
-      const best=Math.max(...en.sets.map(s=>e1rm(s.w,s.r)));
-      if(S.sessions.length>0&&best>bestE1rmFor(en.exId)){const ex=exById(en.exId);if(ex)prs.push(ex.name);}
-    }
     // same-date merge
     const notes=(S.active.notes||"").trim();
     const existing=S.sessions.find(x=>x.date===S.active.date);
@@ -595,7 +581,6 @@ const Workout={
     }
     sortSessions();
     S.active=null;Timer.stop();save();render();
-    if(prs.length)alert("New estimated-1RM PR: "+prs.join(", ")+" 🟢");
   },
   discard(){
     if(confirm("Discard this session? Nothing will be saved."))
@@ -993,43 +978,76 @@ const History={
 
 /* ---------- weight tab ---------- */
 const Weight={
+  mode:"lb", /* "lb" | "waist" — drives the chart and the highlighted column */
+  /* entries carrying a given metric, oldest first */
+  series(k){return S.weights.filter(e=>typeof e[k]==="number"&&e[k]>0);},
+  hero(k,unit){
+    const s=this.series(k);
+    if(!s.length)return "";
+    const latest=s[s.length-1],prev=s.length>1?s[s.length-2]:null;
+    let delta="";
+    if(prev){
+      const d=latest[k]-prev[k];
+      delta=`<div class="wt-delta ${d>0?"up":d<0?"down":""}">${d>0?"+":""}${d.toFixed(1)} ${unit} vs ${fmtDate(prev.date)}</div>`;
+    }
+    return `<div class="wt-stat">
+      <div class="wt-big">${latest[k].toFixed(1)} <span class="muted" style="font-size:15px;font-weight:700">${unit}</span></div>
+      <div class="muted small">${fmtDate(latest.date)}</div>${delta}
+    </div>`;
+  },
   html(){
     const w=S.weights;
-    const latest=w.length?w[w.length-1]:null;
-    const prev=w.length>1?w[w.length-2]:null;
-    let delta="";
-    if(latest&&prev){
-      const d=latest.lb-prev.lb;
-      delta=`<span class="wt-delta ${d>0?"up":d<0?"down":""}">${d>0?"+":""}${d.toFixed(1)} lb vs ${fmtDate(prev.date)}</span>`;
-    }
+    const lastLb=this.series("lb").slice(-1)[0];
+    const lastWaist=this.series("waist").slice(-1)[0];
+    const hasWaist=!!lastWaist;
+    if(this.mode==="waist"&&!hasWaist)this.mode="lb";
+
     let out=`<div class="card">
-      ${latest?`<div class="wt-big">${latest.lb.toFixed(1)} <span class="muted" style="font-size:16px;font-weight:700">lb · ${fmtDate(latest.date)}</span></div>${delta}`:
-        `<p class="muted small">No weigh-ins yet. Log your first below.</p>`}
+      ${lastLb||lastWaist?`<div class="wt-stats">${this.hero("lb","lb")}${this.hero("waist","in")}</div>`:
+        `<p class="muted small">No measurements yet. Log your first below.</p>`}
     </div>
     <div class="card">
+      <div class="field"><label>Date</label>
+        <input type="date" id="wDate" value="${todayStr()}" max="${todayStr()}"></div>
       <div class="row">
-        <div class="grow"><div class="field" style="margin-bottom:0"><label>Date</label>
-          <input type="date" id="wDate" value="${todayStr()}" max="${todayStr()}"></div></div>
-        <div style="width:110px"><div class="field" style="margin-bottom:0"><label>Weight (lb)</label>
-          <input type="number" inputmode="decimal" id="wLb" placeholder="${latest?latest.lb:"lb"}"></div></div>
+        <div class="grow"><div class="field" style="margin-bottom:0"><label>Weight (lb)</label>
+          <input type="number" inputmode="decimal" id="wLb" placeholder="${lastLb?lastLb.lb:"lb"}"></div></div>
+        <div class="grow"><div class="field" style="margin-bottom:0"><label>Waist (in)</label>
+          <input type="number" inputmode="decimal" id="wWaist" placeholder="${lastWaist?lastWaist.waist:"in"}"></div></div>
       </div>
-      <button class="btn primary block" style="margin-top:12px" onclick="Weight.add()">Log weigh-in</button>
+      <p class="muted small" style="margin-top:8px">Either field alone is fine. Waist: at navel, morning, relaxed exhale.</p>
+      <button class="btn primary block" style="margin-top:10px" onclick="Weight.add()">Log measurement</button>
     </div>`;
+
     if(w.length){
-      out+=`<div class="card">
-        <canvas id="wspark" class="spark"></canvas>
+      out+=`<div class="card">`;
+      if(hasWaist)out+=`<div class="seg">
+          <button class="${this.mode==="lb"?"on":""}" onclick="Weight.mode='lb';render()">Weight</button>
+          <button class="${this.mode==="waist"?"on":""}" onclick="Weight.mode='waist';render()">Waist</button>
+        </div>`;
+      out+=`<canvas id="wspark" class="spark"></canvas>
         <div class="muted small" id="wsparkCap" style="text-align:center;margin-top:4px"></div>
       </div>
-      <div class="card"><h3 style="font-size:14px;margin-bottom:6px">Weigh-ins</h3>`;
+      <div class="card"><h3 style="font-size:14px;margin-bottom:6px">Log</h3>`;
+
+      const k=this.mode,unit=k==="lb"?"lb":"in";
+      const other=k==="lb"?"waist":"lb",otherUnit=k==="lb"?"in":"lb";
+      const s=this.series(k);
       for(let i=w.length-1;i>=0;i--){
         const e=w[i];
-        const p2=i>0?w[i-1]:null;
-        const d2=p2?e.lb-p2.lb:null;
+        const v=typeof e[k]==="number"?e[k]:null;
+        const ov=typeof e[other]==="number"?e[other]:null;
+        let d=null;
+        if(v!==null){
+          const si=s.indexOf(e);
+          if(si>0)d=v-s[si-1][k];
+        }
         out+=`<div class="wt-row">
-          <div class="grow">${fmtDate(e.date)}</div>
-          <b>${e.lb.toFixed(1)}</b>
-          <span class="small ${d2===null?"muted":d2>0?"wt-delta up":d2<0?"wt-delta down":"muted"}" style="min-width:52px;text-align:right">
-            ${d2===null?"—":(d2>0?"+":"")+d2.toFixed(1)}</span>
+          <div class="grow">${fmtDate(e.date)}
+            ${ov!==null?`<div class="muted small">${ov.toFixed(1)} ${otherUnit}</div>`:""}</div>
+          <b>${v===null?`<span class="muted">—</span>`:v.toFixed(1)+" "+unit}</b>
+          <span class="small ${d===null?"muted":d>0?"wt-delta up":d<0?"wt-delta down":"muted"}" style="min-width:46px;text-align:right">
+            ${d===null?"—":(d>0?"+":"")+d.toFixed(1)}</span>
           <button class="tag" onclick="Weight.del('${e.date}')">✕</button>
         </div>`;
       }
@@ -1040,25 +1058,35 @@ const Weight={
   },
   add(){
     const date=$("#wDate").value||todayStr();
-    const lb=parseFloat($("#wLb").value);
-    if(!lb||lb<=0){alert("Enter your weight.");return;}
-    const existing=S.weights.find(w=>w.date===date);
-    if(existing)existing.lb=lb;
-    else S.weights.push({date,lb});
+    const lbRaw=$("#wLb").value.trim(),waistRaw=$("#wWaist").value.trim();
+    const lb=lbRaw===""?null:parseFloat(lbRaw);
+    const waist=waistRaw===""?null:parseFloat(waistRaw);
+    if(lb===null&&waist===null){alert("Enter a weight, a waist measurement, or both.");return;}
+    if(lb!==null&&(!isFinite(lb)||lb<=0)){alert("Enter a valid weight.");return;}
+    if(waist!==null&&(!isFinite(waist)||waist<=0)){alert("Enter a valid waist measurement.");return;}
+    let e=S.weights.find(x=>x.date===date);
+    if(!e){e={date};S.weights.push(e);}
+    if(lb!==null)e.lb=lb;
+    if(waist!==null)e.waist=waist;
     S.weights.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     save();render();
   },
   del(date){
-    if(!confirm("Delete this weigh-in?"))return;
+    const e=S.weights.find(x=>x.date===date);
+    const both=e&&typeof e.lb==="number"&&typeof e.waist==="number";
+    if(!confirm(both?"Delete this entry? Both the weight and the waist measurement will be removed.":"Delete this entry?"))return;
     S.weights=S.weights.filter(w=>w.date!==date);save();render();
   },
   drawChart(){
     const c=document.getElementById("wspark");
-    if(!c||!S.weights.length)return;
-    const pts=S.weights.map(w=>({d:w.date,v:w.lb}));
+    if(!c)return;
+    const k=this.mode,unit=k==="lb"?"lb":"in",noun=k==="lb"?"weigh-in":"waist entry";
+    const s=this.series(k);
     const cap=document.getElementById("wsparkCap");
-    const first=pts[0].v,last=pts[pts.length-1].v,net=last-first;
-    cap.textContent=`${pts.length} weigh-in${pts.length===1?"":"s"} · net ${net>0?"+":""}${net.toFixed(1)} lb since ${fmtDate(pts[0].d)}`;
+    if(!s.length){if(cap)cap.textContent="No "+(k==="lb"?"weigh-ins":"waist measurements")+" logged yet.";return;}
+    const pts=s.map(e=>({d:e.date,v:e[k]}));
+    const net=pts[pts.length-1].v-pts[0].v;
+    cap.textContent=`${pts.length} ${noun}${pts.length===1?"":"s"} · net ${net>0?"+":""}${net.toFixed(1)} ${unit} since ${fmtDate(pts[0].d)}`;
     drawLine(c,pts);
   }
 };
